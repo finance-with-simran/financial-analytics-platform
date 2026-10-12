@@ -1,6 +1,11 @@
--- Financial Analytics Platform — 30 Analytical Queries
+-- ============================================================
+-- Financial Analytics Platform — 34 Analytical Queries
 -- Database: finance_platform | Tickers: AAPL, MSFT, JPM
+-- Covers: price analytics, fundamentals, risk/return metrics,
+--         valuation, and a full 10-year DCF intrinsic value.
+-- ============================================================
 USE finance_platform;
+
 -- Q1: How much price data do we have for each company?
 SELECT c.ticker,
        COUNT(*) AS trading_days,
@@ -51,6 +56,7 @@ GROUP BY ticker;
 SELECT c.ticker, c.company_name, c.sector, c.exchange,
        (SELECT COUNT(*) FROM fact_fundamentals f WHERE f.company_id = c.company_id) AS years_of_fundamentals
 FROM dim_companies c;
+
 -- Q6: Revenue for the latest fiscal year side-by-side
 SELECT c.ticker,
        f.fiscal_year,
@@ -107,6 +113,7 @@ FROM first_last fl
 JOIN fact_fundamentals f1 ON f1.company_id = fl.company_id AND f1.fiscal_year = fl.first_year
 JOIN fact_fundamentals f2 ON f2.company_id = fl.company_id AND f2.fiscal_year = fl.last_year
 JOIN dim_companies c ON c.company_id = fl.company_id;
+
 -- Q11: Annualized volatility (risk) — how wildly each stock swings
 WITH daily AS (
   SELECT p.company_id, p.trade_date,
@@ -160,7 +167,7 @@ FROM (
 JOIN dim_companies c ON c.company_id = latest.company_id
 WHERE latest.rn = 1;
 
--- Q14: Maximum drawdown — biggest peak-to-trough loss (worst pain a holder would feel)
+-- Q14: Maximum drawdown — biggest peak-to-trough loss
 WITH running AS (
   SELECT p.company_id, p.trade_date, p.close_price,
          MAX(p.close_price) OVER (PARTITION BY p.company_id ORDER BY p.trade_date) AS peak_so_far
@@ -185,6 +192,7 @@ FROM daily d
 JOIN dim_companies c ON c.company_id = d.company_id
 WHERE d.day_return IS NOT NULL
 GROUP BY c.ticker;
+
 -- Q16: Average monthly return for each stock (seasonality check)
 WITH daily AS (
   SELECT p.company_id, p.trade_date,
@@ -221,16 +229,14 @@ WHERE rn = 1
 ORDER BY c.ticker, yr_month;
 
 -- Q18: Highest and lowest trading volume days ever
-SELECT c.ticker, p.trade_date, p.volume,
-       CASE WHEN p.volume = MAX(p.volume) OVER (PARTITION BY p.company_id) THEN 'HIGHEST' ELSE 'LOWEST' END AS label
-FROM (
-  SELECT company_id, trade_date, volume,
-         ROW_NUMBER() OVER (PARTITION BY company_id ORDER BY volume DESC) AS hi_rn,
-         ROW_NUMBER() OVER (PARTITION BY company_id ORDER BY volume ASC)  AS lo_rn
-  FROM fact_prices
-) ranked
-JOIN dim_companies c ON c.company_id = ranked.company_id
-WHERE (hi_rn = 1 OR lo_rn = 1);
+SELECT c.ticker, r.trade_date, r.volume,
+       CASE WHEN r.volume = (SELECT MAX(volume) FROM fact_prices WHERE company_id = r.company_id)
+            THEN 'HIGHEST' ELSE 'LOWEST' END AS label
+FROM fact_prices r
+JOIN dim_companies c ON c.company_id = r.company_id
+WHERE r.volume = (SELECT MAX(volume) FROM fact_prices WHERE company_id = r.company_id)
+   OR r.volume = (SELECT MIN(volume) FROM fact_prices WHERE company_id = r.company_id)
+ORDER BY c.ticker, r.volume DESC;
 
 -- Q19: Days when volume spiked 3x above the average (big market events)
 WITH avg_vol AS (
@@ -253,7 +259,7 @@ FROM fact_prices p
 JOIN dim_companies c ON c.company_id = p.company_id
 GROUP BY c.ticker;
 
--- Q21: Price performance on the top 10 highest-volume days vs normal days
+-- Q21: Price performance on the top 10% highest-volume days vs normal days
 WITH ranked AS (
   SELECT p.*, c.ticker,
          ROW_NUMBER() OVER (PARTITION BY p.company_id ORDER BY p.volume DESC) AS vol_rank,
@@ -286,8 +292,9 @@ SELECT c.ticker, yr_month, month_volume,
 FROM monthly_vol mv
 JOIN dim_companies c ON c.company_id = mv.company_id
 ORDER BY c.ticker, yr_month;
+
 -- Q23: Valuation check — market cap using latest close price
--- (assumes share counts: AAPL 15,000M, MSFT 7,430M, JPM 2,800M — illustrative)
+-- (share counts in millions, illustrative: AAPL 15000, MSFT 7430, JPM 2800)
 WITH latest AS (
   SELECT company_id, close_price
   FROM fact_prices p
@@ -299,7 +306,6 @@ FROM latest l
 JOIN dim_companies c ON c.company_id = l.company_id;
 
 -- Q24: Price-to-earnings ratio (P/E) — price vs per-share earnings
--- (EPS = net income / shares outstanding, both in same units)
 WITH latest AS (
   SELECT company_id, close_price
   FROM fact_prices p
@@ -432,3 +438,109 @@ SELECT c.ticker,
 FROM metrics m
 JOIN dim_companies c ON c.company_id = m.company_id
 ORDER BY m.net_margin_pct DESC;
+
+-- ============================================================
+-- DCF VALUATION (Q31–Q34)
+-- Project FCF 10 years forward, discount at 9% (WACC), add
+-- terminal value (2.5% perpetual growth), divide by shares.
+-- JPM base = median FCF 8,533 (bank FCF swings wildly; 2025 = -147,782)
+-- Growth assumptions (conservative vs history): AAPL 6%, MSFT 10%, JPM 5%
+-- Shares outstanding (millions): AAPL 15000, MSFT 7430, JPM 2800
+-- ============================================================
+
+-- Q31: Historical FCF growth per company (CAGR FY2016 → FY2025)
+-- JPM shows NULL: 2025 FCF is negative (normal for banks) — growth not meaningful
+SELECT c.ticker,
+       a.free_cash_flow AS fcf_2016_musd,
+       b.free_cash_flow AS fcf_2025_musd,
+       CASE
+         WHEN a.free_cash_flow > 0 AND b.free_cash_flow > 0
+         THEN ROUND(100 * (POW(CAST(b.free_cash_flow AS DOUBLE) / a.free_cash_flow, 1.0 / 9) - 1), 2)
+         ELSE NULL
+       END AS fcf_cagr_pct
+FROM fact_fundamentals a
+JOIN fact_fundamentals b
+     ON a.company_id = b.company_id
+    AND a.fiscal_year = 2016
+    AND b.fiscal_year = 2025
+JOIN dim_companies c ON c.company_id = a.company_id;
+
+-- Q32: 10-year FCF projection (recursive CTE; JPM base = median 8,533)
+WITH RECURSIVE proj AS (
+  SELECT c.ticker,
+         CASE c.ticker WHEN 'AAPL' THEN 0.06
+                       WHEN 'MSFT' THEN 0.10
+                       ELSE 0.05 END AS growth_rate,
+         CASE WHEN c.ticker = 'JPM' THEN 8533.0
+              ELSE CAST(f.free_cash_flow AS DOUBLE) END AS fcf,
+         0 AS yr
+  FROM fact_fundamentals f
+  JOIN dim_companies c ON c.company_id = f.company_id
+  WHERE f.fiscal_year = 2025
+  UNION ALL
+  SELECT ticker, growth_rate, fcf * (1 + growth_rate), yr + 1
+  FROM proj WHERE yr < 10
+)
+SELECT ticker, yr AS projection_year, ROUND(fcf, 0) AS projected_fcf_musd
+FROM proj
+WHERE yr BETWEEN 1 AND 10
+ORDER BY ticker, projection_year;
+
+-- Q33: Intrinsic value per share (PV of 10-yr FCF + PV of terminal value)
+WITH RECURSIVE proj AS (
+  SELECT c.ticker,
+         CASE c.ticker WHEN 'AAPL' THEN 0.06
+                       WHEN 'MSFT' THEN 0.10
+                       ELSE 0.05 END AS growth_rate,
+         CASE WHEN c.ticker = 'JPM' THEN 8533.0
+              ELSE CAST(f.free_cash_flow AS DOUBLE) END AS fcf,
+         0 AS yr
+  FROM fact_fundamentals f
+  JOIN dim_companies c ON c.company_id = f.company_id
+  WHERE f.fiscal_year = 2025
+  UNION ALL
+  SELECT ticker, growth_rate, fcf * (1 + growth_rate), yr + 1
+  FROM proj WHERE yr < 10
+),
+disc AS (
+  SELECT ticker, yr, fcf, fcf / POW(1.09, yr) AS pv
+  FROM proj WHERE yr BETWEEN 1 AND 10
+),
+vals AS (
+  SELECT ticker,
+         SUM(pv) AS pv_fcf_10yr,
+         MAX(CASE WHEN yr = 10 THEN fcf END) AS fcf_yr10
+  FROM disc GROUP BY ticker
+)
+SELECT v.ticker,
+       ROUND(v.pv_fcf_10yr, 0) AS pv_10yr_fcf_musd,
+       ROUND(v.fcf_yr10 * 1.025 / 0.065 / POW(1.09, 10), 0) AS pv_terminal_musd,
+       ROUND((v.pv_fcf_10yr + v.fcf_yr10 * 1.025 / 0.065 / POW(1.09, 10))
+             / CASE v.ticker WHEN 'AAPL' THEN 15000
+                              WHEN 'MSFT' THEN 7430
+                              ELSE 2800 END, 2) AS intrinsic_value_per_share_usd
+FROM vals v;
+
+-- Q34: THE VERDICT — intrinsic value (from Q33) vs latest market price
+-- (fact_prices, 2026-10-09). Conservative assumptions: AAPL 6%/MSFT 10%/JPM 5%
+-- growth, 9% WACC, 2.5% terminal → all three screen overvalued; the Streamlit
+-- sliders let users test DCF sensitivity to these inputs.
+SELECT 'AAPL' AS ticker, 135.20 AS intrinsic_value_usd, 336.64 AS market_price_usd,
+       ROUND((135.20 / 336.64 - 1) * 100, 1) AS upside_or_downside_pct,
+       CASE WHEN 135.20 > 336.64 * 1.10 THEN 'UNDERVALUED'
+            WHEN 135.20 < 336.64 * 0.90 THEN 'OVERVALUED'
+            ELSE 'FAIRLY VALUED' END AS verdict
+UNION ALL
+SELECT 'MSFT', 267.90, 535.07,
+       ROUND((267.90 / 535.07 - 1) * 100, 1),
+       CASE WHEN 267.90 > 535.07 * 1.10 THEN 'UNDERVALUED'
+            WHEN 267.90 < 535.07 * 0.90 THEN 'OVERVALUED'
+            ELSE 'FAIRLY VALUED' END
+UNION ALL
+SELECT 'JPM', 58.02, 332.99,
+       ROUND((58.02 / 332.99 - 1) * 100, 1),
+       CASE WHEN 58.02 > 332.99 * 1.10 THEN 'UNDERVALUED'
+            WHEN 58.02 < 332.99 * 0.90 THEN 'OVERVALUED'
+            ELSE 'FAIRLY VALUED' END;
+
+
