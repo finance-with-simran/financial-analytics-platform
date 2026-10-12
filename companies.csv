@@ -1,0 +1,4 @@
+company_id,ticker,company_name,sector,exchange,currency
+1,AAPL,"Apple Inc.",Technology,NASDAQ,USD
+2,MSFT,"Microsoft Corporation",Technology,NASDAQ,USD
+3,JPM,"JPMorgan Chase & Co.","Financial Services",NYSE,USD
