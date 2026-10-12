@@ -1,6 +1,6 @@
 """
 Financial Analytics Platform — Streamlit Dashboard
-SQL star schema (MySQL) -> analytical queries -> interactive web dashboard.
+SQL star schema (MySQL) -> 34 analytical queries -> interactive web dashboard.
 Companies: AAPL, MSFT, JPM | 15 yrs prices | 10 yrs fundamentals | DCF valuation.
 """
 import streamlit as st
@@ -38,9 +38,8 @@ def load_data():
 try:
     companies, prices, fundamentals = load_data()
 except FileNotFoundError as e:
-    st.error(f"Data file not found: {e.filename}. "
-             "Make sure data/companies.csv, data/prices.csv and "
-             "data/fundamentals.csv are in the repo.")
+    st.error(f"Data file not found: {e.filename}. Make sure data/companies.csv, "
+             "data/prices.csv and data/fundamentals.csv are in the repo.")
     st.stop()
 
 ticker_map = dict(zip(companies["company_id"], companies["ticker"]))
@@ -139,10 +138,10 @@ elif page == "📊 Fundamentals":
 
 t1, t2, t3 = st.columns(3)
     last = f.iloc[-1]
-    with t1: kpi_card("Revenue (FY2025)", f"\${last.revenue:,.0f}M", "net sales")
-    with t2: kpi_card("Net Income (FY2025)", f"\${last.net_income:,.0f}M",
+    with t1: kpi_card("Revenue (latest FY)", f"\${last.revenue:,.0f}M", "net sales")
+    with t2: kpi_card("Net Income (latest FY)", f"\${last.net_income:,.0f}M",
                       f"margin {100*last.net_income/last.revenue:.1f}%")
-    with t3: kpi_card("Free Cash Flow (FY2025)",
+    with t3: kpi_card("Free Cash Flow (latest FY)",
                       f"\${last.free_cash_flow:,.0f}M", "cash the DCF runs on")
 
 fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -182,7 +181,7 @@ fig = go.Figure()
         df = prices[prices.ticker == t].copy()
         df["dd"] = (df.close_price / df.close_price.cummax() - 1) * 100
         fig.add_trace(go.Scatter(x=df.trade_date, y=df.dd, name=t,
-                                  line=dict(color=COLORS[t], width=1.4)))
+                                 line=dict(color=COLORS[t], width=1.4)))
     fig.update_layout(height=420, yaxis_title="Drawdown %",
                       title="Underwater curve — every 0% peak is an all-time high",
                       paper_bgcolor="#0e1117", plot_bgcolor="#0e1117",
@@ -190,14 +189,14 @@ fig = go.Figure()
                       legend=dict(orientation="h", y=1.15))
     fig.update_yaxes(gridcolor="#1f2739")
     st.plotly_chart(fig, use_container_width=True)
-    st.info("Sharpe = (CAGR − " + str(RISK_FREE) + "% risk-free) ÷ volatility. "
+    st.info(f"Sharpe = (CAGR − {RISK_FREE}% risk-free) ÷ volatility. "
             "Correlation between the three names' daily returns was computed in "
             "SQL (Q28) — see queries.sql in the GitHub repo.")
 
 # ----------------------------- PAGE 4: DCF -----------------------------
 elif page == "💰 DCF Valuation":
     st.title("💰 DCF Valuation — 10-Year Intrinsic Value Model")
-    st.caption("Engine mirrors SQL queries Q31–Q34: FCF CAGR projection → "
+    st.caption("Engine mirrors SQL queries Q31–Q34: FCF projection → "
                "discount at WACC → terminal value → value per share.")
 
 f = fundamentals[fundamentals.ticker == tkr].sort_values("fiscal_year")
@@ -220,4 +219,99 @@ c1, c2, c3 = st.columns(3)
 
 # ---- DCF engine (same math as SQL Q32/Q33) ----
     years = np.arange(1, 11)
-    f
+    fcf_proj = base_fcf * (1 + g / 100) ** years
+    disc = (1 + wacc / 100) ** years
+    pv_explicit = float((fcf_proj / disc).sum())
+
+if wacc / 100 <= gt / 100:
+        st.error("WACC must be higher than terminal growth — the "
+                 "Gordon Growth formula divides by (WACC − g).")
+        st.stop()
+    tv = fcf_proj[-1] * (1 + gt / 100) / ((wacc - gt) / 100)
+    pv_tv = float(tv / disc[-1])
+    equity_value = pv_explicit + pv_tv
+    per_share = equity_value / SHARES_M[tkr]
+
+market, mkt_date = latest_price(tkr)
+    upside = (per_share / market - 1) * 100
+    q33 = Q33_INTRINSIC[tkr]
+
+k1, k2, k3, k4 = st.columns(4)
+    with k1: kpi_card("DCF Value / Share", f"\${per_share:,.2f}", "your slider inputs")
+    with k2: kpi_card("Market Price", f"\${market:,.2f}", f"as of {mkt_date:%d %b %Y}")
+    with k3: kpi_card("Upside / Downside", f"{upside:+.1f}%", "DCF vs market")
+    with k4: kpi_card("SQL Benchmark (Q33)", f"\${q33:,.2f}",
+                      "growth / 9% WACC / 2.5% terminal")
+
+verdict = "UNDERVALUED ⬆️" if upside > 15 else \
+              "OVERVALUED ⬇️" if upside < -15 else "FAIRLY VALUED ➡️"
+    if abs(per_share - q33) < 0.01:
+        st.success(f"**Verdict: {verdict}** — slider inputs match the SQL "
+                   "model exactly. Play with the sliders to see how "
+                   "sensitive the verdict is.")
+    else:
+        st.info(f"**Verdict: {verdict}** — you moved the assumptions away "
+                "from the SQL baseline (Q33). This is DCF sensitivity in "
+                "action: change WACC or growth and the verdict can flip.")
+
+st.subheader("Projected Free Cash Flow (10-year explicit forecast)")
+    fig = go.Figure(go.Bar(x=years, y=fcf_proj, name="Projected FCF",
+                           marker_color=COLORS[tkr], opacity=0.85))
+    fig.add
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=years, y=fcf_proj, name="Projected FCF",
+                         marker_color=COLORS[tkr], opacity=0.85))
+    fig.add_trace(go.Scatter(x=years, y=fcf_proj / disc, name="PV of FCF",
+                             line=dict(color="#ffb74d", width=3)))
+    fig.update_layout(height=380, xaxis_title="Forecast year",
+                      yaxis_title="$ millions", barmode="group",
+                      hovermode="x unified",
+                      paper_bgcolor="#0e1117", plot_bgcolor="#0e1117",
+                      font=dict(color="#e8eaed"))
+    fig.update_yaxes(gridcolor="#1f2733")
+    st.plotly_chart(fig, use_container_width=True)
+
+st.subheader("Sensitivity — DCF value per share vs WACC & growth")
+    waccs = [7.0, 8.0, 9.0, 10.0]
+    grows = np.arange(0.0, 12.1, 2.0)
+    matrix = []
+    for gg in grows:
+        row = []
+        for ww in waccs:
+            proj = base_fcf * (1 + gg / 100) ** years
+            d2 = (1 + ww / 100) ** years
+            pv = (proj / d2).sum() + proj[-1] * (1 + gt / 100) / \
+                 ((ww - gt) / 100) / d2[-1]
+            row.append(pv / SHARES_M[tkr])
+        matrix.append(row)
+    sens = pd.DataFrame(matrix, index=[f"{gg:.0f}%" for gg in grows],
+                        columns=[f"WACC {ww:.0f}%" for ww in waccs])
+    st.dataframe(sens.style.format("${:,.2f}").background_gradient(
+        cmap="RdYlGn"), use_container_width=True)
+    st.caption("Green = higher intrinsic value. Find the combination where "
+               f"the cell exceeds the market price (${market:,.2f}) — that's "
+               "the bull case.")
+
+# ----------------------------- PAGE 5: PROJECT STORY -----------------------------
+else:
+    st.title("🛠️ How This Project Was Built")
+    st.markdown("""
+    **Pipeline:** raw market CSVs → **MySQL star schema** (`dim_companies`,
+    `fact_prices`, `fact_fundamentals`) → **34 analytical SQL queries**
+    (window functions, recursive CTEs, CAGR math) → **Power BI** report →
+    **this Streamlit dashboard** (Python / Pandas / Plotly).
+
+**Data:** 15 years of daily OHLCV prices (~11,900 rows) + 10 years of
+    fundamentals (FY2016–FY2025) for Apple, Microsoft and JPMorgan.
+
+**The DCF tab** reproduces the SQL valuation (Q31–Q34) interactively:
+    10-year FCF projection, discounting at WACC, Gordon Growth terminal
+    value — with live sliders and a sensitivity matrix.
+
+**Headline result (SQL-verified):** under conservative assumptions
+    (growth AAPL 6% / MSFT 10% / JPM 5%, WACC 9%, terminal growth 2.5%),
+    intrinsic values were AAPL $135.20, MSFT $267.90, JPM $58.02 —
+    all below market prices, demonstrating DCF sensitivity.
+
+*Educational/portfolio project — not investment advice.*
+    """)
