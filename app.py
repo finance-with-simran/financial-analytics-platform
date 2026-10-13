@@ -190,6 +190,13 @@ def get_risk_metrics(tkr):
     max_dd = ((df.close_price - roll_max) / roll_max).min() * 100.0
     return vol, sharpe, max_dd
 
+def safe_gradient(styler, cmap="RdYlGn"):
+    """Applies background_gradient if matplotlib is installed, else returns plain styler."""
+    try:
+        return styler.background_gradient(cmap=cmap)
+    except Exception:
+        return styler
+
 def render_kpi(label, value, detail=""):
     st.markdown(f"""
     <div class="metric-container">
@@ -540,7 +547,7 @@ elif nav_choice == "⚠️ Risk Metrics":
     corr_mat = piv.pct_change().dropna().corr()
     c1, c2 = st.columns([1, 1])
     with c1:
-        st.dataframe(corr_mat.style.background_gradient(cmap="Blues").format("{:.3f}"), use_container_width=True)
+        st.dataframe(safe_gradient(corr_mat.style, cmap="Blues").format("{:.3f}"), use_container_width=True)
     with c2:
         st.markdown(f"""
         - **Sharpe Benchmark:** Risk-free rate is **{RISK_FREE}%** (10-Yr US Treasury).
@@ -723,7 +730,7 @@ elif nav_choice == "💰 DCF Valuation":
         columns=[f"WACC {w_val:.0f}%" for w_val in test_waccs]
     )
     st.dataframe(
-        sens_df.style.format("${:,.2f}").background_gradient(cmap="RdYlGn"),
+        safe_gradient(sens_df.style.format("${:,.2f}"), cmap="RdYlGn"),
         use_container_width=True
     )
     st.caption(f"🟢 Green cells exceed current market price (${mkt_price:,.2f}) — bull cases.")
@@ -880,7 +887,7 @@ elif nav_choice == "🏢 LBO Model (Buyout)":
         columns=[f"Exit {x:.1f}x" for x in test_exits]
     )
     st.dataframe(
-        irr_sens_df.style.format("{:.1f}%").background_gradient(cmap="RdYlGn"),
+        safe_gradient(irr_sens_df.style.format("{:.1f}%"), cmap="RdYlGn"),
         use_container_width=True
     )
     st.caption("🟢 Green indicates sponsor IRRs above 20% hurdle rate.")
