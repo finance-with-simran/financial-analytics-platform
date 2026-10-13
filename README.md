@@ -15,8 +15,8 @@ Recruiters and visitors do not need to install Power BI Desktop or download the 
 
 ---
 
-## 🚀 Live Interactive Web App
-- **Live Streamlit App:** [CLICK HERE TO LAUNCH](https://share.streamlit.io)
+## 🚀 Live Interactive Web App :
+https://finance-with-simran-financial-analytics-platform-app-b5bfja.streamlit.app/
 - **Features:**
   - 📈 **Trading Charts:** 15-year interactive candlestick, SMA 50/200, and daily volume.
   - 📊 **Fundamentals:** 10-year trends for Revenue, Net Income, and Free Cash Flow.
