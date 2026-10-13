@@ -4,10 +4,8 @@
 
 ---
 
-## 🚀 Live Dashboard
-
-**👉 Try the interactive dashboard here:**  
-### **[CLICK HERE — LIVE DASHBOARD](PASTE_YOUR_STREAMLIT_LINK_HERE)**
+## 🚀 Live Dashboard :
+https://finance-with-simran-financial-analytics-platform-app-b5bfja.streamlit.app/
 
 Explore 15 years of trading charts, fundamentals, risk metrics, and a fully adjustable DCF valuation model — no download, no SQL needed, runs in any browser.
 
