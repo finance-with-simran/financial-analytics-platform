@@ -345,6 +345,51 @@ if nav_choice == "📈 Trading Charts":
 
     st.info("💡 **Technical Context:** A **Golden Cross** occurs when the 50-day moving average crosses above the 200-day moving average, signaling an upward trend. Volume spikes highlight institutional activity around earnings and macroeconomic events.")
 
+    # Multi-Stock Trend and Power BI Section
+    st.markdown("---")
+    st.markdown("### 📊 15-Year Multi-Asset Performance and Power BI Visual")
+    tab_multi, tab_pbi = st.tabs(["🌐 Interactive Multi-Stock Comparison (AAPL vs MSFT vs JPM)", "📈 Original Power BI Report View"])
+
+    with tab_multi:
+        st.caption("Compare 15-year cumulative return and performance across Tech and Banking giants.")
+        mode = st.radio("Comparison Mode", ["Normalized % Growth (Base = 100 in 2011)", "Raw Stock Price ($ USD)"], horizontal=True)
+        piv_prices = prices.pivot(index="trade_date", columns="ticker", values="close_price")
+        
+        fig_comp = go.Figure()
+        for tkr_c in ["AAPL", "MSFT", "JPM"]:
+            if mode.startswith("Normalized"):
+                series_vals = (piv_prices[tkr_c] / piv_prices[tkr_c].iloc[0]) * 100.0
+                y_label = "Cumulative Growth Index (Base 100)"
+            else:
+                series_vals = piv_prices[tkr_c]
+                y_label = "Price ($ USD)"
+            fig_comp.add_trace(go.Scatter(
+                x=piv_prices.index,
+                y=series_vals,
+                name=f"{tkr_c} — {name_map.get(tkr_c, '')}",
+                line=dict(color=COLORS[tkr_c], width=2)
+            ))
+        fig_comp.update_layout(
+            height=460,
+            hovermode="x unified",
+            template="plotly_dark",
+            paper_bgcolor="#0e1117",
+            plot_bgcolor="#0e1117",
+            yaxis_title=y_label,
+            legend=dict(orientation="h", y=1.12, x=0.5, xanchor="center"),
+            margin=dict(l=10, r=10, t=30, b=10)
+        )
+        fig_comp.update_yaxes(gridcolor="#1f2937")
+        fig_comp.update_xaxes(gridcolor="#1f2937")
+        st.plotly_chart(fig_comp, use_container_width=True)
+
+    with tab_pbi:
+        pbi_img = locate_file(["power_bi_dashboard.png"])
+        if pbi_img:
+            st.image(str(pbi_img), caption="Power BI Report: 15-Year Adjusted Closing Prices (AAPL vs MSFT vs JPM)", use_container_width=True)
+        else:
+            st.info("Power BI dashboard preview image loaded from repository.")
+
 # ==============================================================================
 # PAGE 2: FUNDAMENTALS
 # ==============================================================================

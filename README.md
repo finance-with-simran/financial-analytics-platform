@@ -1,19 +1,39 @@
 # 💹 Financial Analytics Platform
 
-**End-to-end financial data engineering & valuation project** — a SQL data warehouse of 15 years of market data for Apple (AAPL), Microsoft (MSFT) & JPMorgan (JPM), analyzed through 34 SQL analytical queries, visualized in Power BI, and delivered as a live Streamlit web dashboard with an interactive DCF valuation model.
+**End-to-End Financial Data Engineering & Valuation Platform**  
+A production MySQL Star Schema data warehouse housing 15 years of daily market data (Stooq) and 10 years of SEC fundamentals (Macrotrends) for **Apple (AAPL)**, **Microsoft (MSFT)**, and **JPMorgan Chase (JPM)**, analyzed through 34 analytical SQL queries, visualized in **Power BI**, and delivered as an interactive **Streamlit web application** featuring a **10-Year DCF Model** and **5-Year Private Equity LBO Buyout Model**.
 
 ---
 
-## 🚀 Live Dashboard :
-https://finance-with-simran-financial-analytics-platform-app-b5bfja.streamlit.app/
+## 📊 Power BI Dashboard Preview
 
-Explore 15 years of trading charts, fundamentals, risk metrics, and a fully adjustable DCF valuation model — no download, no SQL needed, runs in any browser.
+Recruiters and visitors do not need to install Power BI Desktop or download the .pbix file to see the analysis. Here is the 15-year comparative price trend built in Power BI:
 
-| Page | What you'll see |
-|------|----------------|
-| 📈 Trading Charts | 15-yr candlestick + volume + SMA 50/200 for each stock |
-| 📊 Fundamentals | 10-yr revenue / net income / FCF trends |
-| ⚠️ Risk Metrics | Volatility, Sharpe ratio, max drawdown, underwater curve |
-| 💰 DCF Valuation | Intrinsic value with **live sliders** (growth, WACC, terminal growth) |
+![Power BI 15-Year Trend](power_bi_dashboard.png)
+
+> **Key Takeaway:** Demonstrates the 15-year comparative growth trajectory across tech giants (Apple, Microsoft) vs. the premier US diversified banking institution (JPMorgan Chase).
 
 ---
+
+## 🚀 Live Interactive Web App
+- **Live Streamlit App:** [CLICK HERE TO LAUNCH](https://share.streamlit.io)
+- **Features:**
+  - 📈 **Trading Charts:** 15-year interactive candlestick, SMA 50/200, and daily volume.
+  - 📊 **Fundamentals:** 10-year trends for Revenue, Net Income, and Free Cash Flow.
+  - ⚠️ **Risk & Portfolio Analytics:** Volatility, Sharpe ratio, underwater drawdown curves, and correlation matrix.
+  - 💰 **10-Year DCF Valuation:** Live sliders for FCF growth, WACC, and terminal growth with instant intrinsic value recalculation.
+  - 🏢 **5-Year LBO Model:** Private equity buyout schedule, debt paydown, MoIC, and sponsor IRR % returns.
+  - 📚 **Financial Guide:** Plain-English guide demystifying Budgeting vs Forecasting vs DCF vs LBO.
+
+---
+
+## 🏗️ Architecture & Data Pipeline
+1. **Data Ingestion:**
+   - **Market Prices:** 15 years of daily OHLCV bars (~11,900 rows) from **Stooq**.
+   - **Financial Statements:** 10 years of annual statements (FY2016–FY2025) from **Macrotrends**.
+2. **MySQL 8 Star Schema:**
+   - dim_companies: Corporate dimension entity.
+   - act_prices: Daily time-series fact table.
+   - act_fundamentals: Annual income & cash flow fact table.
+3. **34 Analytical SQL Queries:** Window functions, CAGR, peak-to-trough drawdown, multi-asset correlation, and recursive CTE cash flow projections.
+4. **Power BI & Streamlit UI:** BI reporting combined with interactive parameter simulation in Python.
