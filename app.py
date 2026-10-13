@@ -259,12 +259,26 @@ if nav_choice == "📈 Trading Charts":
     with c3: render_kpi("Annual Volatility", f"{vol:.1f}%", "Std Dev × √252")
     with c4: render_kpi("Max Drawdown", f"{max_dd:.1f}%", "Worst Peak-to-Trough")
 
-    # Timeframe Selector
-    tf_col1, _ = st.columns([1, 3])
-    with tf_col1:
+    # Chart Display Controls
+    ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([2, 2, 2])
+    with ctrl_col1:
         time_window = st.selectbox(
-            "Select Time Window",
-            ["Full 15 Years (2011–2026)", "Past 5 Years", "Past 1 Year", "Past 6 Months"]
+            "Time Window",
+            ["Full 15 Years (2011–2026)", "Past 5 Years", "Past 1 Year", "Past 6 Months"],
+            index=0
+        )
+    with ctrl_col2:
+        chart_type = st.selectbox(
+            "Chart Style",
+            ["📈 Smooth Line & Area (Recommended for 15Y)", "🕯️ Candlestick (Best for 6M/1Y)"],
+            index=0 if time_window == "Full 15 Years (2011–2026)" else 1,
+            help="15 years of daily data has 3,966 candlesticks. Packing 4,000 candles into one screen creates dense black candle borders. Smooth Line mode gives a clean, readable view like Bloomberg or TradingView."
+        )
+    with ctrl_col3:
+        theme_choice = st.selectbox(
+            "Chart Theme",
+            ["🌙 Dark Terminal (TradingView)", "☀️ Clean Light (Power BI & Excel)"],
+            index=0
         )
 
     df_chart = prices[prices.ticker == selected_ticker].copy()
@@ -278,28 +292,49 @@ if nav_choice == "📈 Trading Charts":
     df_chart["sma50"] = df_chart.close_price.rolling(50).mean()
     df_chart["sma200"] = df_chart.close_price.rolling(200).mean()
 
+    is_light = (theme_choice == "☀️ Clean Light (Power BI & Excel)")
+    bg_paper = "#ffffff" if is_light else "#0e1117"
+    bg_plot = "#f8fafc" if is_light else "#111827"
+    grid_col = "#e2e8f0" if is_light else "#1f2937"
+    text_col = "#1e293b" if is_light else "#f1f5f9"
+    template_name = "plotly_white" if is_light else "plotly_dark"
+
     fig = make_subplots(
         rows=2, cols=1,
         shared_xaxes=True,
         row_heights=[0.75, 0.25],
-        vertical_spacing=0.03,
-        subplot_titles=(f"{selected_ticker} Candlestick Chart (SMA 50 / 200)", "Daily Trading Volume")
+        vertical_spacing=0.04,
+        subplot_titles=(f"{selected_ticker} Price Action & Moving Averages", "Daily Trading Volume")
     )
 
-    # Candlestick
-    fig.add_trace(
-        go.Candlestick(
-            x=df_chart.trade_date,
-            open=df_chart.open_price,
-            high=df_chart.high_price,
-            low=df_chart.low_price,
-            close=df_chart.close_price,
-            name="Price (OHLC)",
-            increasing_line_color="#10b981",
-            decreasing_line_color="#ef4444"
-        ),
-        row=1, col=1
-    )
+    # Main Price Trace: Candlestick or Glowing Area Line
+    if "Candlestick" in chart_type:
+        fig.add_trace(
+            go.Candlestick(
+                x=df_chart.trade_date,
+                open=df_chart.open_price,
+                high=df_chart.high_price,
+                low=df_chart.low_price,
+                close=df_chart.close_price,
+                name="OHLC Candlestick",
+                increasing_line_color="#10b981",
+                decreasing_line_color="#ef4444"
+            ),
+            row=1, col=1
+        )
+    else:
+        # Smooth line with subtle shaded area underneath
+        fig.add_trace(
+            go.Scatter(
+                x=df_chart.trade_date,
+                y=df_chart.close_price,
+                name="Close Price",
+                line=dict(color=COLORS[selected_ticker], width=2.5),
+                fill="tozeroy",
+                fillcolor="rgba(14, 165, 233, 0.12)" if selected_ticker == "MSFT" else ("rgba(16, 185, 129, 0.12)" if selected_ticker == "AAPL" else "rgba(245, 158, 11, 0.12)")
+            ),
+            row=1, col=1
+        )
 
     # SMA 50
     fig.add_trace(
@@ -318,19 +353,20 @@ if nav_choice == "📈 Trading Charts":
             x=df_chart.trade_date,
             y=df_chart["sma200"],
             name="SMA 200 (Long-term)",
-            line=dict(color="#38bdf8", width=1.5)
+            line=dict(color="#6366f1", width=1.8)
         ),
         row=1, col=1
     )
 
-    # Volume
+    # Volume Bars
+    vol_color = "#3b82f6" if is_light else "#818cf8"
     fig.add_trace(
         go.Bar(
             x=df_chart.trade_date,
             y=df_chart.volume,
-            name="Volume",
-            marker_color="#6366f1",
-            opacity=0.6
+            name="Shares Traded",
+            marker_color=vol_color,
+            opacity=0.65
         ),
         row=2, col=1
     )
@@ -338,16 +374,17 @@ if nav_choice == "📈 Trading Charts":
     fig.update_layout(
         height=660,
         xaxis_rangeslider_visible=False,
-        legend=dict(orientation="h", y=1.06, x=0.5, xanchor="center"),
+        legend=dict(orientation="h", y=1.06, x=0.5, xanchor="center", font=dict(color=text_col)),
         margin=dict(l=10, r=10, t=40, b=10),
-        template="plotly_dark",
-        paper_bgcolor="#0e1117",
-        plot_bgcolor="#0e1117",
+        template=template_name,
+        paper_bgcolor=bg_paper,
+        plot_bgcolor=bg_plot,
+        font=dict(color=text_col),
         hovermode="x unified"
     )
-    fig.update_yaxes(gridcolor="#1f2937", row=1, col=1, title="Price (USD)")
-    fig.update_yaxes(gridcolor="#1f2937", row=2, col=1, title="Volume")
-    fig.update_xaxes(gridcolor="#1f2937")
+    fig.update_yaxes(gridcolor=grid_col, row=1, col=1, title="Price (USD)", title_font=dict(color=text_col))
+    fig.update_yaxes(gridcolor=grid_col, row=2, col=1, title="Volume", title_font=dict(color=text_col))
+    fig.update_xaxes(gridcolor=grid_col)
     st.plotly_chart(fig, use_container_width=True)
 
     st.info("💡 **Technical Context:** A **Golden Cross** occurs when the 50-day moving average crosses above the 200-day moving average, signaling an upward trend. Volume spikes highlight institutional activity around earnings and macroeconomic events.")
